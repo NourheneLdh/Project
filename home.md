@@ -107,7 +107,7 @@ This confirmed that **BTarget** had sufficient privileges to interact with the D
 **Result:**
 Successfully enumerated all domain users, extracted Administrator account information, and listed key privileged groups inside the Active Directory environment.
 
-![RPC Enumeration](images/rpc_enum.png)
+![RPC Enumeration](images/rpc-enum.png)
 
 ---
 

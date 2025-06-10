@@ -12,9 +12,9 @@ This project showcases a complete attack chain in a controlled environment, demo
  
 For this project, I prepared a controlled lab environment using two virtual machines connected through an isolated internal network named **AD-LAB**. The attacker machine was configured with **Kali Linux**, a penetration testing distribution equipped with all necessary tools. The target machine was set up with **Windows Server 2019**, configured as a **Domain Controller** for the domain **cyberlabs.local**. Manual static IP addresses were assigned to ensure proper network communication: **192.168.1.233** for the Windows Server and **192.168.1.100** for Kali Linux. The Windows Server was installed with **Active Directory Domain Services and DNS**. I created multiple users in Active Directory, including a specific target account named **BTarget**. For the attack setup, **BTarget's account was modified by disabling Kerberos pre-authentication** to make it vulnerable to AS-REP Roasting. The DNS settings on both machines were aligned correctly, and the environment was carefully validated to ensure full connectivity and readiness for attack demonstrations. This configuration allowed realistic simulation of enumeration, authentication, and exploitation scenarios within a typical corporate network structure.
 
-**Attacker Machine:** Kali Linux  |  **Target Machine:** Windows Server 2019 (Domain Controller)  |  **Network:** Internal Network (AD-LAB)  |  **Domain:** cyberlabs.local  |  **Target User:** BTarget  |  **IP Addresses:**: Kali Linux: 192.168.1.100 snd Windows Server 2019: 192.168.1.233  
+**Attacker Machine:** Kali Linux  |  **Target Machine:** Windows Server 2019 (Domain Controller)  |  **Network:** Internal Network (AD-LAB)  |  **Domain:** cyberlabs.local  |  **Target User:** BTarget  |  **IP Addresses:**: Kali Linux: 192.168.1.100 and Windows Server 2019: 192.168.1.233  
 
-**Tools Used:**: Impacket Suite (GetNPUsers.py, secretsdump.py), rpcclient, smbclient, BloodHound + SharpHound, CrackMapExec, John the Ripper, msfvenom, netcat (nc), winPEAS.exe
+**Tools Used:** Impacket Suite (GetNPUsers.py, secretsdump.py), rpcclient, smbclient, BloodHound + SharpHound, CrackMapExec, John the Ripper, msfvenom, netcat (nc), winPEAS.exe
 
 ---
 
@@ -364,12 +364,16 @@ Successfully established a **backdoor administrative user** for persistent acces
 
 ## 5. Sources
 
-- [Impacket GitHub - Tools for network protocol manipulation](https://github.com/fortra/impacket)
-- [BloodHound GitHub - Active Directory attack path visualization](https://github.com/BloodHoundAD/BloodHound)
-- [Red Team Notes - Active Directory Attacks (AS-REP Roasting, Pass-the-Hash, BloodHound Collection)](https://www.thehacker.recipes/ad/movement)
-- [Reverse Shell Cheatsheet (Payloads and Commands)](https://highon.coffee/blog/reverse-shell-cheat-sheet/)
-- [PEASS-ng GitHub - Privilege Escalation Awesome Scripts (winPEAS)](https://github.com/carlospolop/PEASS-ng)
-- [Kali Linux Official Tools Documentation](https://tools.kali.org/tools-listing)
+- https://github.com/fortra/impacket: Impacket GitHub: Tools for network protocol manipulation
+- https://github.com/BloodHoundAD/BloodHound: BloodHound GitHub - Active Directory attack path visualization
+- https://www.youtube.com/watch?v=VXxH4n684HE&list=WL&index=30&t=14314s: Active Directory attack steps (Install Windows Server 2019, Setting up domain controller/ users machines, Active Directory Attack)
+- https://www.youtube.com/watch?v=Wv5snUVF2qw&list=WL&index=9: Windows SMBCLIENT Share
+- https://www.youtube.com/watch?v=oVvW66zBI3I&list=WL&index=24: RPCClient enumeration
+- https://www.thehacker.recipes/ad/movement: Red Team Notes - Active Directory Attacks (AS-REP Roasting, Pass-the-Hash, BloodHound Collection)
+- https://highon.coffee/blog/reverse-shell-cheat-sheet/: Reverse Shell Cheatsheet (Payloads and Commands)
+- https://github.com/carlospolop/PEASS-ng: PEASS-ng GitHub - Privilege Escalation Awesome Scripts (winPEAS)
+- https://tools.kali.org/tools-listing: Kali Linux Official Tools Documentation
+
 
 ---
 
@@ -377,4 +381,4 @@ Successfully established a **backdoor administrative user** for persistent acces
 
 The project successfully simulated an end-to-end domain attack starting from basic enumeration to full Administrator compromise. Key vulnerabilities exploited included weak Kerberos authentication policies, insecure SMB shares, and lack of proper privilege hardening.
 This exercise not only reinforced theoretical concepts but also provided hands-on experience with real-world adversary techniques, preparing me for more advanced penetration testing and security analysis tasks.
-*This project was designed using a streamlined two-machine setup—Kali Linux as the attacker and Windows Server 2019 as the Domain Controller—to simulate a real-world domain compromise. While some scenarios involve multiple hosts, directly targeting the Domain Controller allowed me to demonstrate full end-to-end exploitation, privilege escalation, and persistence across the domain with precision and clarity.*
+*This project was designed using a streamlined two-machine setup Kali Linux as the attacker and Windows Server 2019 as the Domain Controller to simulate a real-world domain compromise. While some scenarios involve multiple hosts, directly targeting the Domain Controller allowed me to demonstrate full end-to-end exploitation, privilege escalation, and persistence across the domain with precision and clarity.*

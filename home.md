@@ -12,9 +12,6 @@ The primary objective of this project was to simulate an attack chain against a 
 ## 2. Environment Setup
  
 For this project, I prepared a controlled lab environment using two virtual machines connected through an isolated internal network named **AD-LAB**. The attacker machine was configured with **Kali Linux**, a penetration testing distribution equipped with all necessary tools. The target machine was set up with **Windows Server 2019**, configured as a **Domain Controller** for the domain **cyberlabs.local**. Manual static IP addresses were assigned to ensure proper network communication: **192.168.1.233** for the Windows Server and **192.168.1.100** for Kali Linux. The Windows Server was installed with **Active Directory Domain Services and DNS**. I created multiple users in Active Directory, including a specific target account named **BTarget**. The DNS settings on both machines were aligned correctly, and the environment was carefully validated to ensure full connectivity and readiness for attack demonstrations. This configuration allowed realistic simulation of enumeration, authentication, and exploitation scenarios within a typical corporate network structure.
-
-**Attacker Machine:** Kali Linux  |  **Target Machine:** Windows Server 2019 (Domain Controller)  |  **Network:** Internal Network (AD-LAB)  |  **Domain:** cyberlabs.local  |  **Target User:** BTarget  |  **IP Addresses:**: Kali Linux: 192.168.1.100 and Windows Server 2019: 192.168.1.233  
-
 **Tools Used:** Impacket Suite (GetNPUsers.py, secretsdump.py), rpcclient, smbclient, BloodHound + SharpHound, CrackMapExec, John the Ripper, msfvenom, netcat (nc), winPEAS.exe
 
 ---
@@ -29,7 +26,7 @@ For this project, I prepared a controlled lab environment using two virtual mach
 ### 4.1 AS-REP Roasting & Password Cracking
 
 **AS-REP Roasting** is a technique used to exploit user accounts in Active Directory that have the **"Do not require Kerberos pre-authentication"** setting enabled. This misconfiguration allows an attacker to request an encrypted **TGT** (**Ticket Granting Ticket**) directly from the Domain Controller without needing to send valid credentials first.
-Once the encrypted TGT is received, it can be **cracked offline** using tools like John the Ripper. The attack is effective because it avoids detection and does not lock accounts during brute-force attempts.
+Once the encrypted TGT is received, it can be **cracked offline** using tools like John the Ripper.
 
 **Step 1: Requesting AS-REP Hashes**
 
@@ -37,14 +34,14 @@ First, I prepared a file called `users.txt` containing a list of usernames. Then
 ```bash
 impacket-GetNPUsers cyberlabs.local/ -usersfile users.txt -request -dc-ip 192.168.1.233
 ```
-- `impacket-GetNPUsers:` This script is used to request AS-REP hashes for users that have Kerberos pre-authentication disabled. 
-- `cyberlabs.local/:` This specifies the domain name.
-- `-usersfile users.txt:` This tells the script to read usernames from the file users.txt.                
-- `-request:` This flag tells the script to actively request TGTs for those users.
-- `-dc-ip 192.168.1.233`: This is the IP address of the Domain Controller to target.
+- `impacket-GetNPUsers:` Used to request AS-REP hashes for users that have Kerberos pre-authentication disabled. 
+- `cyberlabs.local/:` Specifies the domain name.
+- `-usersfile users.txt:` Tells the script to read usernames from the file users.txt.                
+- `-request:` Tells the script to actively request TGTs for those users.
+- `-dc-ip 192.168.1.233`: The IP address of the Domain Controller to target.
 
 **Result:**
-If a user is vulnerable (doesn’t require pre-authentication), their TGT will be returned in the form of a **Kerberos AS-REP hash**, which I saved into a file named `hashes.txt` for the next step. **Extracted AS-REP Hash:** `$krb5asrep$23$BTarget@CYBERLABS.LOCAL:c4480233c4a762b114402fc9d8a53cd$7908763a4bbf19954c3d6e01038dabce6f908e529cb824d0a453e6b467096c13a676f29c0b0a8539c68f3b190c18859b1f3a61cbac5cf5996da02078a10ce78d7da8301a67a720a103e7e2097c0426cfdbb8e7f8409f59aa0247d777416a12c28bd18438a4ee9ea636950ae41c8a324654b696db2488d29d5a8add67bcda54bde2231d50b328c55af5ad3622f6bda3d332a3b75f1fdc00fc6336fb6e10e9e4adf31bccac5cf5996da02078c5c1aaa4a5f1d614b003b78c628b0bbdb59a4ce309b0a859c4c330354d096d1626eb8433e5d36d2506f6ef`
+If a user is vulnerable (doesn’t require pre-authentication), their TGT will be returned in the form of a **Kerberos AS-REP hash**, which I saved into a file named `hashes.txt` for the next step:`$krb5asrep$23$BTarget@CYBERLABS.LOCAL:c4480233c4a762b114402fc9d8a53cd$7908763a4bbf19954c3d6e01038dabce6f908e529cb824d0a453e6b467096c13a676f29c0b0a8539c68f3b190c18859b1f3a61cbac5cf5996da02078a10ce78d7da8301a67a720a103e7e2097c0426cfdbb8e7f8409f59aa0247d777416a12c28bd18438a4ee9ea636950ae41c8a324654b696db2488d29d5a8add67bcda54bde2231d50b328c55af5ad3622f6bda3d332a3b75f1fdc00fc6336fb6e10e9e4adf31bccac5cf5996da02078c5c1aaa4a5f1d614b003b78c628b0bbdb59a4ce309b0a859c4c330354d096d1626eb8433e5d36d2506f6ef`
 
 **Step 2: Cracking the Hash**
 
@@ -59,7 +56,7 @@ john --wordlist=/usr/share/wordlists/rockyou.txt hashes.txt
 **Result:**
 John the Ripper tested many passwords from the wordlist and eventually found the correct one.
 
-**Final Result: I successfully cracked BTarget's password, it was:** **`password1`**. This confirmed that the user account was vulnerable to AS-REP Roasting due to weak password practices and a misconfigured Kerberos policy. This step gave me **valid credentials** for a real domain user, which I then used in the following attack phases (like RPC and SMB enumeration).
+**Final Result: I successfully cracked BTarget's password, it was:** **`password1`**. This confirmed that the user account was vulnerable to AS-REP Roasting due to weak password practices and a misconfigured Kerberos policy. This step gave me **valid credentials** for a real domain user.
 
 ![Password Cracked](images/cracked-password.PNG)
 
@@ -79,7 +76,6 @@ rpcclient -U 'CYBERLABS.LOCAL\\BTarget' 192.168.1.233
 - `rpcclient:` The main enumeration tool.
 - `-U 'CYBERLABS.LOCAL\\BTarget':` Specifies the domain and the user to authenticate with.
 - `192.168.1.233:` The IP address of the Domain Controller.
-Once connected, I got access to an RPC prompt where I could run enumeration commands.
 
 **Step 2: Enumerating Domain Users**: `rpcclient> enumdomusers` : This command retrieved a list of **all domain user accounts**.
 This provided insight into **real users**, including potentially **service accounts** and **privileged identities**.
@@ -217,7 +213,7 @@ These shares contain sensitive configuration files and serve as pivot points for
 - Achieved **stealthy lateral movement capability** a common real-world adversary tactic.
 
 **Real-World Implication:**  
-PTH attacks allow adversaries to **spread across systems silently**, reusing hash values and bypassing traditional password protections. It is especially dangerous when combined with other privilege escalation methods or service misconfigurations.
+PTH attacks allow adversaries to **spread across systems silently**, reusing hash values and bypassing traditional password protections.
 
 ![PTH Success](images/success-pth.PNG)
 
@@ -226,7 +222,6 @@ PTH attacks allow adversaries to **spread across systems silently**, reusing has
 ### 4.6 Post-Exploitation Enumeration with winPEAS
 
 Once I gained access to the target Windows Server through SMB and confirmed post-exploitation access, I performed **local privilege escalation enumeration** using **winPEAS**, a powerful reconnaissance tool used by attackers to uncover misconfigurations, stored credentials, and exploitable paths.
-
 
 **Step 1: Uploading winPEAS to the Target**
 
@@ -257,7 +252,6 @@ winPEAS ran a **comprehensive scan** of the local system, automatically identify
 - Confirmed that **BTarget’s access allowed post-exploitation enumeration**.
 - Identified **several potential privilege escalation vectors**.
 - This phase would support follow-up attacks like service exploitation, user impersonation, or registry abuse in a real-world scenario.
-This step proves that I had complete post-exploitation visibility inside the domain critical for understanding privilege abuse opportunities and establishing persistence.
 
 ![winPEAS Results](images/winpeas_results.png)
 
@@ -265,7 +259,7 @@ This step proves that I had complete post-exploitation visibility inside the dom
 
 ### 4.7 Reverse Shell Attack
 
-Once I completed enumeration and discovered potential privilege escalation opportunities, I moved to establish **full remote control** over the Windows Server using a **reverse shell**.
+I moved to establish **full remote control** over the Windows Server using a **reverse shell**.
 A **reverse shell** allows the target machine to connect back to the attacker, creating an interactive session. This enables stealthy and persistent post-exploitation activities.
 
 **Step 1: Generating the Reverse Shell Payload**

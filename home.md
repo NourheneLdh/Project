@@ -4,13 +4,14 @@
 
 ## 1. Introduction
 
-This project showcases a complete attack chain in a controlled environment, demonstrating how initial weaknesses in Active Directory configurations can lead to full domain compromise. Using Kali Linux and Windows Server 2019, I simulated real-world offensive techniques, including password cracking, enumeration, privilege escalation, and remote exploitation.
+This project showcases an attack chain in a controlled environment, demonstrating how initial weaknesses in Active Directory configurations can lead to domain compromise. Using Kali Linux and Windows Server 2019, I simulated real-world offensive techniques, including password cracking, enumeration, privilege escalation, and remote exploitation.
+The primary objective of this project was to simulate an attack chain against a vulnerable Active Directory environment. The attack begins with gaining initial access through **AS-REP Roasting**, targeting user accounts with disabled Kerberos pre-authentication to extract encrypted ticket-granting responses and crack their passwords offline. Once credentials are obtained, the next goal is to **enumerate the domain structure**, gathering information about users, groups, and resources to map out the internal environment. Following successful enumeration, the aim is to **discover potential privilege escalation paths** that would allow moving from a standard user account to higher privileges. Finally, the ultimate goal is to **achieve system compromise by obtaining a remote shell as Administrator**, demonstrating complete control over the target system.
 
 ---
 
 ## 2. Environment Setup
  
-For this project, I prepared a controlled lab environment using two virtual machines connected through an isolated internal network named **AD-LAB**. The attacker machine was configured with **Kali Linux**, a penetration testing distribution equipped with all necessary tools. The target machine was set up with **Windows Server 2019**, configured as a **Domain Controller** for the domain **cyberlabs.local**. Manual static IP addresses were assigned to ensure proper network communication: **192.168.1.233** for the Windows Server and **192.168.1.100** for Kali Linux. The Windows Server was installed with **Active Directory Domain Services and DNS**. I created multiple users in Active Directory, including a specific target account named **BTarget**. For the attack setup, **BTarget's account was modified by disabling Kerberos pre-authentication** to make it vulnerable to AS-REP Roasting. The DNS settings on both machines were aligned correctly, and the environment was carefully validated to ensure full connectivity and readiness for attack demonstrations. This configuration allowed realistic simulation of enumeration, authentication, and exploitation scenarios within a typical corporate network structure.
+For this project, I prepared a controlled lab environment using two virtual machines connected through an isolated internal network named **AD-LAB**. The attacker machine was configured with **Kali Linux**, a penetration testing distribution equipped with all necessary tools. The target machine was set up with **Windows Server 2019**, configured as a **Domain Controller** for the domain **cyberlabs.local**. Manual static IP addresses were assigned to ensure proper network communication: **192.168.1.233** for the Windows Server and **192.168.1.100** for Kali Linux. The Windows Server was installed with **Active Directory Domain Services and DNS**. I created multiple users in Active Directory, including a specific target account named **BTarget**. The DNS settings on both machines were aligned correctly, and the environment was carefully validated to ensure full connectivity and readiness for attack demonstrations. This configuration allowed realistic simulation of enumeration, authentication, and exploitation scenarios within a typical corporate network structure.
 
 **Attacker Machine:** Kali Linux  |  **Target Machine:** Windows Server 2019 (Domain Controller)  |  **Network:** Internal Network (AD-LAB)  |  **Domain:** cyberlabs.local  |  **Target User:** BTarget  |  **IP Addresses:**: Kali Linux: 192.168.1.100 and Windows Server 2019: 192.168.1.233  
 
@@ -18,12 +19,7 @@ For this project, I prepared a controlled lab environment using two virtual mach
 
 ---
 
-## 3. Attack Scenario Overview
-
-**Goal:**  
-The primary objective of this project was to simulate a complete attack chain against a vulnerable Active Directory environment. The attack begins with gaining initial access through **AS-REP Roasting**, targeting user accounts with disabled Kerberos pre-authentication to extract encrypted ticket-granting responses and crack their passwords offline. Once credentials are obtained, the next goal is to **enumerate the domain structure**, gathering information about users, groups, and resources to map out the internal environment. Following successful enumeration, the aim is to **discover potential privilege escalation paths** that would allow moving from a standard user account to higher privileges. Finally, the ultimate goal is to **achieve full system compromise by obtaining a remote shell as Administrator**, demonstrating complete control over the target system. Each phase of the attack chain is executed using real-world tools and techniques, closely mimicking actual adversary behaviors in enterprise networks.
-
-**Attack Flow:**
+## 3. Attack Flow:
 > AS-REP Roasting ➞ Password Cracking ➞ RPC/SMB Enumeration ➞ BloodHound Mapping ➞ Pass-the-Hash ➞ Reverse Shell Access
 
 ---
@@ -37,7 +33,7 @@ Once the encrypted TGT is received, it can be **cracked offline** using tools li
 
 **Step 1: Requesting AS-REP Hashes**
 
-First, I prepared a file called `users.txt` containing a list of usernames I wanted to test from Active Directory. Then, I used the `GetNPUsers.py` script from the Impacket toolkit to extract Kerberos AS-REP hashes from the Domain Controller:
+First, I prepared a file called `users.txt` containing a list of usernames. Then, I used the `GetNPUsers.py` script from the Impacket toolkit to extract Kerberos AS-REP hashes from the Domain Controller:
 ```bash
 impacket-GetNPUsers cyberlabs.local/ -usersfile users.txt -request -dc-ip 192.168.1.233
 ```
@@ -85,20 +81,19 @@ rpcclient -U 'CYBERLABS.LOCAL\\BTarget' 192.168.1.233
 - `192.168.1.233:` The IP address of the Domain Controller.
 Once connected, I got access to an RPC prompt where I could run enumeration commands.
 
-**Step 2: Enumerating Domain Users**: `rpcclient> enumdomusers` : This command retrieved a list of **all domain user accounts**. Among them were accounts like: `Administrator`, `BTarget`, `AHart`, `SConnor`, `Lcyber`, `TAlma`, `svc-SharePoint`, etc.
+**Step 2: Enumerating Domain Users**: `rpcclient> enumdomusers` : This command retrieved a list of **all domain user accounts**.
 This provided insight into **real users**, including potentially **service accounts** and **privileged identities**.
 
 **Step 3: Querying Specific User Information**: `rpcclient> queryuser 0x1f4`
 The RID `0x1f4` corresponds to the built-in **Administrator account**. This command revealed:
 - Password last set time  
 - Logon count  
-- Bad password attempts  
-- Account description and more  
+- Bad password attempts   
 This kind of info is helpful for assessing **account activity**, detecting old/unused accounts, and verifying if default accounts are active.
 
 **Step 4: Enumerating Groups**: `rpcclient> enumdomgroups`
-This command returned a list of all domain groups, including **high-privilege ones** like: **Domain Admins**, **Enterprise Admins**, **Schema Admins**, **Key Admins**, **Group Policy Creator Owners**
-These groups often control critical parts of the domain — identifying them is key for building privilege escalation paths.
+This command returned a list of all domain groups, including **high-privilege ones** like: **Domain Admins**, **Enterprise Admins**, **Key Admins**.
+These groups often control critical parts of the domain and identifying them is key for building privilege escalation paths.
 
 **Final Result:**
 - I confirmed that **BTarget** could interact with the Domain Controller using RPC.
@@ -126,29 +121,24 @@ smbclient -L //192.168.1.233 -U BTarget
 
 **Result:**
 Successfully connected using `BTarget:password1`. Discovered the following default Windows shares:
-- **ADMIN$** – Remote admin share (restricted)
-- **C$** – Root of the C: drive (admin-only)
-- **IPC$** – Inter-Process Communication
-- **NETLOGON** – Contains logon scripts and domain policies (readable)
-- **SYSVOL** – Holds domain-wide Group Policy Objects and configuration files (readable)
+- **ADMIN$:** Remote admin share (restricted)
+- **C$:** Root of the C: drive (admin-only)
+- **IPC$:** Inter-Process Communication
+- **NETLOGON:** Contains logon scripts and domain policies (readable)
+- **SYSVOL:** Holds domain-wide Group Policy Objects and configuration files (readable)
 
 **NETLOGON** and **SYSVOL** were **accessible with standard domain user permissions**.
 
-**Step 2: Accessing the SYSVOL Share**
-
-`smbclient //192.168.1.233/SYSVOL -U BTarget`, `smb: \> ls`. The directory `cyberlabs.local` (the domain name) was present. I navigated into it: `cd cyberlabs.local\\scripts`, `ls:` The **scripts** folder was empty, this is normal for a newly set up domain where no login scripts have been defined.
-This confirms that **BTarget** had **read access** to SYSVOL, a typical **post-exploitation pivot point** in Active Directory environments.
-
-**Step 3: Exploring Group Policy Configuration**
+**Step 2: Exploring Group Policy Configuration**
 
 `cd Policies:` I Found two key Group Policy folders:
 - `{31B2F340-016D-11D2-945F-00C04FB984F9}`: Default Domain Policy
 - `{6AC1786C-016F-11D2-945F-00C04FB984F9}`: Default Domain Controllers Policy 
 
 Navigated into the first one: `cd "{31B2F340-016D-11D2-945F-00C04FB984F9}"`and discovered the following structure:
-- **GPT.INI** – A versioning file that tracks Group Policy changes
-- **MACHINE/** – Contains policies that apply to computers
-- **USER/** – Contains policies that apply to users
+- **GPT.INI:** A versioning file that tracks Group Policy changes
+- **MACHINE/:** Contains policies that apply to computers
+- **USER/:** Contains policies that apply to users
 
 **Step 4: Retrieving Important Files**
 
@@ -156,12 +146,6 @@ Downloaded and reviewed the GPT.INI file: `get GPT.INI`, `cat GPT.INI` : Content
 This indicates the version of the policy, updated whenever changes are made to GPO settings.
 
 ![SMB Enumeration](images/smb_enum.png)
-
-**Step 5: Getting Policy Rules**
-
-Navigated to the MACHINE directory and downloaded the **Registry.pol** file: `cd MACHINE`, `ls`, `get Registry.pol`
-`Registry.pol` contains the **actual policy rules** (like password complexity, RDP settings, service permissions, etc.).  
-Note: It is in binary format and cannot be viewed directly with `cat`.
 
 **Final Result:**
 Through SMB enumeration, I was able to:
@@ -178,11 +162,7 @@ Through SMB enumeration, I was able to:
 
 ### Step 1: Preparing and Collecting Active Directory Data with SharpHound
 
-To begin the Active Directory mapping process, I installed the necessary tools on Kali Linux by running `sudo apt update` and `sudo apt install bloodhound neo4j -y`. I started the Neo4j database using `sudo neo4j console` and accessed the browser interface at `http://localhost:7474/browser/`, logging in with username `neo4j` and password `Password123`. Then, I launched the BloodHound GUI by typing `bloodhound` and logged in with the same credentials. To prepare the collection tool, I fixed the DNS settings in Kali by editing `/etc/resolv.conf`, adding Google’s public DNS servers (`8.8.8.8` and `8.8.4.4`), and confirmed GitHub connectivity with `ping raw.githubusercontent.com`. I downloaded `SharpHound.exe` using `wget`: `wget https://github.com/BloodHoundAD/BloodHound/raw/master/Collectors/SharpHound.exe -O SharpHound.exe`. Once downloaded, I uploaded it to the target Windows Server using `smbclient //192.168.1.233/ShareTest -U BTarget`, then used `put SharpHound.exe` to place the file in the shared folder. On the Windows Server, I moved the file to the Desktop, ran Command Prompt as Administrator, navigated to the Desktop, and executed the collection using `SharpHound.exe -c All`, which created a ZIP file with collected AD data (e.g., `20250426134424_BloodHound.zip`). Finally, I returned to Kali, reconnected to the SMB share, and downloaded the ZIP file using `get "20250426134424_BloodHound.zip"` to prepare it for import into BloodHound.
-
-**Step 2: Uploading Data to BloodHound for Analysis**
-
-In BloodHound I Clicked the **Upload Data** button and Selected the retrieved ZIP file. BloodHound automatically parsed and mapped the entire Active Directory structure.
+I started the Neo4j database using `sudo neo4j console` and accessed the browser interface at `http://localhost:7474/browser/`, logging in with username `neo4j` and password `Password123`. Then, I launched the BloodHound GUI. To prepare the collection tool, I fixed the DNS settings in Kali by editing `/etc/resolv.conf`, adding Google’s public DNS servers (`8.8.8.8` and `8.8.4.4`), and confirmed GitHub connectivity with `ping raw.githubusercontent.com`. I downloaded `SharpHound.exe` using `wget`: `wget https://github.com/BloodHoundAD/BloodHound/raw/master/Collectors/SharpHound.exe -O SharpHound.exe`. Once downloaded, I uploaded it to the target Windows Server using `smbclient //192.168.1.233/ShareTest -U BTarget`, then used `put SharpHound.exe` to place the file in the shared folder. On the Windows Server, I moved the file to the Desktop, ran Command Prompt as Administrator, navigated to the Desktop, and executed the collection using `SharpHound.exe -c All`, which created a ZIP file with collected AD data (e.g., `20250426134424_BloodHound.zip`). Finally, I returned to Kali, reconnected to the SMB share, and downloaded the ZIP file using `get "20250426134424_BloodHound.zip"` to prepare it for import into BloodHound. BloodHound automatically parsed and mapped the entire Active Directory structure.
 
 **Final Result:**
 I navigated to the **BTarget@cyberlabs.local** user node and used BloodHound to **Visualize relationships** between users, groups, and permissions, Use the "Shortest Path to High-Value Targets" feature to detect escalation paths and Identify powerful permissions like:
@@ -191,7 +171,7 @@ I navigated to the **BTarget@cyberlabs.local** user node and used BloodHound to 
   - `AddKeyCredentialLink`
   - `GetChanges` / `GetChangesAll`
   - `DCSync` (Domain Replication)
-This allowed me to simulate **lateral movement and privilege escalation** scenarios from BTarget to Domain Admin — just like in a real-world AD compromise.
+This allowed me to simulate **lateral movement and privilege escalation** scenarios from BTarget to Domain Admin, just like in a real-world AD compromise.
 
 ![BloodHound Graph](images/bloodhound_graph.png)
 
@@ -247,22 +227,20 @@ PTH attacks allow adversaries to **spread across systems silently**, reusing has
 
 Once I gained access to the target Windows Server through SMB and confirmed post-exploitation access, I performed **local privilege escalation enumeration** using **winPEAS**, a powerful reconnaissance tool used by attackers to uncover misconfigurations, stored credentials, and exploitable paths.
 
-**Step 1: Downloading winPEAS to Kali Linux**
+
+**Step 1: Uploading winPEAS to the Target**
 
 I downloaded the latest version of winPEAS from GitHub, This saved the executable as `winPEAS.exe` on my attacker machine.
 ```bash
 wget https://github.com/carlospolop/PEASS-ng/releases/latest/download/winPEASany.exe -O winPEAS.exe
 ```
-
-**Step 2: Uploading winPEAS to the Target**
-
 I used `smbclient` to upload the file to a writable SMB share (`ShareTest`) on the Domain Controller. Upload confirmed winPEAS.exe was now available on the target machine.
 ```bash
 smbclient //192.168.1.233/ShareTest -U BTarget
 put winPEAS.exe
 ```
 
-**Step 3: Executing winPEAS on the Windows Server**
+**Step 2: Executing winPEAS on the Windows Server**
 
 On the Windows Server I Navigated to the `ShareTest` directory and **Double-clicked** `winPEAS.exe` to run it manually, No administrator privileges were required for this basic scan.
 

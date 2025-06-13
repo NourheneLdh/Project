@@ -4,14 +4,14 @@
 
 ## 1. Introduction
 
-This project showcases an attack chain in a controlled environment, demonstrating how initial weaknesses in Active Directory configurations can lead to domain compromise. Using Kali Linux and Windows Server 2019, I simulated real-world offensive techniques, including password cracking, enumeration, privilege escalation, and remote exploitation.
+This project simulates an attack chain in a lab to demonstrate how weak Active Directory settings lead to domain compromise. Using Kali Linux and Windows Server 2019, I simulated real-world offensive techniques, including password cracking, enumeration, privilege escalation, and remote exploitation.
 The primary objective of this project was to simulate an attack chain against a vulnerable Active Directory environment. The attack begins with gaining initial access through **AS-REP Roasting**, targeting user accounts with disabled Kerberos pre-authentication to extract encrypted ticket-granting responses and crack their passwords offline. Once credentials are obtained, the next goal is to **enumerate the domain structure**, gathering information about users, groups, and resources to map out the internal environment. Following successful enumeration, the aim is to **discover potential privilege escalation paths** that would allow moving from a standard user account to higher privileges. Finally, the ultimate goal is to **achieve system compromise by obtaining a remote shell as Administrator**, demonstrating complete control over the target system.
 
 ---
 
 ## 2. Environment Setup
  
-For this project, I prepared a controlled lab environment using two virtual machines connected through an isolated internal network named **AD-LAB**. The attacker machine was configured with **Kali Linux**, a penetration testing distribution equipped with all necessary tools. The target machine was set up with **Windows Server 2019**, configured as a **Domain Controller** for the domain **cyberlabs.local**. Manual static IP addresses were assigned to ensure proper network communication: **192.168.1.233** for the Windows Server and **192.168.1.100** for Kali Linux. The Windows Server was installed with **Active Directory Domain Services and DNS**. I created multiple users in Active Directory, including a specific target account named **BTarget**. The DNS settings on both machines were aligned correctly, and the environment was carefully validated to ensure full connectivity and readiness for attack demonstrations. This configuration allowed realistic simulation of enumeration, authentication, and exploitation scenarios within a typical corporate network structure.
+For this project, I prepared a controlled lab environment using two virtual machines connected through an isolated internal network named **AD-LAB**. The attacker machine was configured with **Kali Linux**, a penetration testing distribution equipped with all necessary tools. The target machine was set up with **Windows Server 2019**, configured as a **Domain Controller** for the domain **cyberlabs.local**. Manual static IP addresses were assigned to ensure proper network communication: **192.168.1.233** for the Windows Server and **192.168.1.100** for Kali Linux. The Windows Server was installed with **Active Directory Domain Services and DNS**. I created multiple users in Active Directory, including a specific target account named **BTarget**.
 
 **Tools Used:** Impacket Suite (GetNPUsers.py, secretsdump.py), rpcclient, smbclient, BloodHound + SharpHound, CrackMapExec, John the Ripper, msfvenom, netcat (nc), winPEAS.exe
 
@@ -27,7 +27,6 @@ For this project, I prepared a controlled lab environment using two virtual mach
 ### 4.1 AS-REP Roasting & Password Cracking
 
 **AS-REP Roasting** is a technique used to exploit user accounts in Active Directory that have the **"Do not require Kerberos pre-authentication"** setting enabled. This misconfiguration allows an attacker to request an encrypted **TGT** (**Ticket Granting Ticket**) directly from the Domain Controller without needing to send valid credentials first.
-Once the encrypted TGT is received, it can be **cracked offline** using tools like John the Ripper.
 
 **Step 1: Requesting AS-REP Hashes**
 
@@ -66,7 +65,7 @@ John the Ripper tested many passwords from the wordlist and eventually found the
 ### 4.2 Enumeration with RPCClient
 
 After cracking BTarget's password, I performed **Active Directory enumeration** using the `rpcclient` tool. This tool allows interaction with **Windows RPC services**, enabling the enumeration of **domain users**, **groups**, and detailed **account information**, even without administrative privileges.
-This phase is crucial in a real penetration test because it reveals **who exists in the domain**, what groups are available, and what access levels users might have.
+This phase is crucial because it reveals **who exists in the domain**, what groups are available, and what access levels users might have.
 
 **Step 1: Connecting to the Domain Controller**
 
@@ -159,15 +158,13 @@ Through SMB enumeration, I was able to:
 
 ### Step 1: Preparing and Collecting Active Directory Data with SharpHound
 
-I started the Neo4j database using `sudo neo4j console` and accessed the browser interface at `http://localhost:7474/browser/`, logging in with username `neo4j` and password `Password123`. Then, I launched the BloodHound GUI. To prepare the collection tool, I fixed the DNS settings in Kali by editing `/etc/resolv.conf`, adding Google’s public DNS servers (`8.8.8.8` and `8.8.4.4`), and confirmed GitHub connectivity with `ping raw.githubusercontent.com`. I downloaded `SharpHound.exe` using `wget`:`wget https://github.com/BloodHoundAD/BloodHound/raw/master/Collectors/SharpHound.exe -O SharpHound.exe`. Once downloaded, I uploaded it to the target Windows Server using `smbclient //192.168.1.233/ShareTest -U BTarget`, then used `put SharpHound.exe` to place the file in the shared folder. On the Windows Server, I moved the file to the Desktop, ran Command Prompt as Administrator, navigated to the Desktop, and executed the collection using `SharpHound.exe -c All`, which created a ZIP file with collected AD data (e.g., `20250426134424_BloodHound.zip`). Finally, I returned to Kali, reconnected to the SMB share, and downloaded the ZIP file using `get "20250426134424_BloodHound.zip"` to prepare it for import into BloodHound. BloodHound automatically parsed and mapped the entire Active Directory structure.
+I started the Neo4j database using `sudo neo4j console` and accessed the browser interface at `http://localhost:7474/browser/`, I downloaded `SharpHound.exe`. Once downloaded, I uploaded it to the target Windows Server using `smbclient //192.168.1.233/ShareTest -U BTarget`, then used `put SharpHound.exe` to place the file in the shared folder. On the Windows Server, ran Command Prompt as Administrator, and executed the collection using `SharpHound.exe -c All`, which created a ZIP file with collected AD data (e.g., `20250426134424_BloodHound.zip`). Finally, I returned to Kali, reconnected to the SMB share, and downloaded the ZIP file using `get "20250426134424_BloodHound.zip"` to prepare it for import into BloodHound.
 
 **Final Result:**
 I navigated to the **BTarget@cyberlabs.local** user node and used BloodHound to **Visualize relationships** between users, groups, and permissions, Use the "Shortest Path to High-Value Targets" feature to detect escalation paths and Identify powerful permissions like:
   - `GenericAll`
   - `GenericWrite`
-  - `AddKeyCredentialLink`
   - `GetChanges` / `GetChangesAll`
-  - `DCSync` (Domain Replication)
 This allowed me to simulate **lateral movement and privilege escalation** scenarios from BTarget to Domain Admin, just like in a real-world AD compromise.
 
 ![BloodHound Graph](images/bloodhound_graph.png)
@@ -224,35 +221,26 @@ PTH attacks allow adversaries to **spread across systems silently**, reusing has
 
 Once I gained access to the target Windows Server through SMB and confirmed post-exploitation access, I performed **local privilege escalation enumeration** using **winPEAS**, a powerful reconnaissance tool used by attackers to uncover misconfigurations, stored credentials, and exploitable paths.
 
-**Step 1: Uploading winPEAS to the Target**
-
-I downloaded the latest version of winPEAS from GitHub, This saved the executable as `winPEAS.exe` on my attacker machine.
-```bash
-wget https://github.com/carlospolop/PEASS-ng/releases/latest/download/winPEASany.exe -O winPEAS.exe
-```
+**Executing winPEAS on the Windows Server**
 I used `smbclient` to upload the file to a writable SMB share (`ShareTest`) on the Domain Controller. Upload confirmed winPEAS.exe was now available on the target machine.
 ```bash
 smbclient //192.168.1.233/ShareTest -U BTarget
 put winPEAS.exe
 ```
-
-**Step 2: Executing winPEAS on the Windows Server**
-
 On the Windows Server I Navigated to the `ShareTest` directory and **Double-clicked** `winPEAS.exe` to run it manually, No administrator privileges were required for this basic scan.
 
 **Result of winPEAS Enumeration:**
 
 winPEAS ran a **comprehensive scan** of the local system, automatically identifying:
 - **DLL Hijacking** vectors
-- **Misconfigured services**
+- **Misconfigured services**,  **System info**
 - **Weak permissions** on sensitive files and folders
 - **Stored credentials** in memory or config files
-- **System info**, environment variables, services, and scheduled tasks
 
 **Final Result:**
 - Confirmed that **BTarget’s access allowed post-exploitation enumeration**.
 - Identified **several potential privilege escalation vectors**.
-- This phase would support follow-up attacks like service exploitation, user impersonation, or registry abuse in a real-world scenario.
+- This phase would support follow-up attacks like service exploitation, user impersonation, or registry abuse.
 
 ![winPEAS Results](images/winpeas_results.png)
 

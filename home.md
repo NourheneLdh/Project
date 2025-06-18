@@ -1,5 +1,5 @@
 
-# Advanced Active Directory Attack Simulation: End-to-End Compromise
+# Active Directory Attack Simulation: End-to-End Compromise
 
 
 ## 1. Introduction

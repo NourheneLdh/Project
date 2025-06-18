@@ -214,39 +214,9 @@ These shares contain sensitive configuration files and serve as pivot points for
 PTH attacks allow adversaries to **spread across systems silently**, reusing hash values and bypassing traditional password protections.
 
 ![PTH Success](images/success-pth.PNG)
-
 ---
 
-### 4.6 Post-Exploitation Enumeration with winPEAS
-
-Once I gained access to the target Windows Server through SMB and confirmed post-exploitation access, I performed **local privilege escalation enumeration** using **winPEAS**, a powerful reconnaissance tool used by attackers to uncover misconfigurations, stored credentials, and exploitable paths.
-
-**Executing winPEAS on the Windows Server**
-I used `smbclient` to upload the file to a writable SMB share (`ShareTest`) on the Domain Controller. Upload confirmed winPEAS.exe was now available on the target machine.
-```bash
-smbclient //192.168.1.233/ShareTest -U BTarget
-put winPEAS.exe
-```
-On the Windows Server I Navigated to the `ShareTest` directory and **Double-clicked** `winPEAS.exe` to run it manually, No administrator privileges were required for this basic scan.
-
-**Result of winPEAS Enumeration:**
-
-winPEAS ran a **comprehensive scan** of the local system, automatically identifying:
-- **DLL Hijacking** vectors
-- **Misconfigured services**,  **System info**
-- **Weak permissions** on sensitive files and folders
-- **Stored credentials** in memory or config files
-
-**Final Result:**
-- Confirmed that **BTarget’s access allowed post-exploitation enumeration**.
-- Identified **several potential privilege escalation vectors**.
-- This phase would support follow-up attacks like service exploitation, user impersonation, or registry abuse.
-
-![winPEAS Results](images/winpeas_results.png)
-
----
-
-### 4.7 Reverse Shell Attack
+### 4.6 Reverse Shell Attack
 
 I moved to establish **full remote control** over the Windows Server using a **reverse shell**.
 A **reverse shell** allows the target machine to connect back to the attacker, creating an interactive session. This enables stealthy and persistent post-exploitation activities.
@@ -295,11 +265,11 @@ Confirmed full administrative privileges.
 
 ![Reverse Shell Access](images/reverse-shell.PNG)
 
-### 4.8 Creating a Text File (Proof of System Compromise)
+### 4.7 Creating a Text File (Proof of System Compromise)
 
 To demonstrate **full read/write/execute control** over the compromised system, I created a new text file named `PWNED.txt` on the Administrator's Desktop containing a custom message. This action proved total dominance over the system and the ability to manipulate files at will.
 
-### 4.9 Creating a Hidden Administrator Account
+### 4.8 Creating a Hidden Administrator Account
 
 After gaining complete system control, I created a **persistent hidden admin account** to maintain future accessa common adversary technique.
 ```bash
@@ -331,8 +301,6 @@ Successfully established a **backdoor administrative user** for persistent acces
 - https://www.youtube.com/watch?v=Wv5snUVF2qw&list=WL&index=9: Windows SMBCLIENT Share
 - https://www.youtube.com/watch?v=oVvW66zBI3I&list=WL&index=24: RPCClient enumeration
 - https://www.thehacker.recipes/ad/movement: Red Team Notes - Active Directory Attacks (AS-REP Roasting, Pass-the-Hash, BloodHound Collection)
-- https://highon.coffee/blog/reverse-shell-cheat-sheet/: Reverse Shell Cheatsheet (Payloads and Commands)
-- https://github.com/carlospolop/PEASS-ng: PEASS-ng GitHub - Privilege Escalation Awesome Scripts (winPEAS)
 - https://tools.kali.org/tools-listing: Kali Linux Official Tools Documentation
 
 

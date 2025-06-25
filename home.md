@@ -221,7 +221,7 @@ PTH attacks allow adversaries to **spread across systems silently**, reusing has
 I moved to establish **full remote control** over the Windows Server using a **reverse shell**.
 A **reverse shell** allows the target machine to connect back to the attacker, creating an interactive session. This enables stealthy and persistent post-exploitation activities.
 
-**Note: Before executing the payload on the target, Windows Defender was manually disabled on the Windows Server. This was done to prevent the system from detecting or deleting the file during the demonstration.**
+**Note: I manually disabled Windows Defender on the Windows Server before executing the payload. This was done to prevent the system from detecting or deleting the file during the demonstration.**
 
 **Step 1: Generating the Reverse Shell Payload**
 
